@@ -217,7 +217,14 @@ def generate_python_code(core_concepts, core_relations, concept_frequencies, out
             if concept in core_concepts:
                 f.write(f"# - {concept}: {freq}\n")
 
+STOP_WORDS = {
+    "ET", "OU", "DONC", "MAIS", "CAR", "PUIS", "ALORS", "SI", "IL", "AU", "AUX", "DU", "DE", "DES", "EN", "UN", "UNE", "LE", "LA", "LES", "CE", "CET", "CETTE", "SON", "SA", "SES", "SUR", "PAR", "POUR", "AVEC", "SANS", "DANS", "SOUS", "VERS", "CHEZ", "FAUT"
+}
+
 def is_valid_concept(concept):
+    # Exclure si dans la liste des stop words
+    if concept in STOP_WORDS:
+        return False
     # Exclure si commence/termine par un guillemet ou parenthèse
     if concept.startswith('"') or concept.endswith('"'):
         return False
