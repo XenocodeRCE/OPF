@@ -155,9 +155,11 @@ def extract_ontology_from_json(json_file_path, min_concept_frequency=2):
     core_concepts = {concept for concept, count in all_concepts.items() 
                     if count >= min_concept_frequency}
     
-    # Filtrer les relations pour ne garder que celles avec des concepts fréquents
-    core_relations = [(src, rel, dst) for src, rel, dst in all_relations 
-                 if src in core_concepts and dst in core_concepts]
+    # Filtrer les relations pour ne garder que celles avec des concepts fréquents ET valides
+    core_relations = [
+        (src, rel, dst) for src, rel, dst in all_relations
+        if src in core_concepts and dst in core_concepts and is_valid_concept(src) and is_valid_concept(dst)
+    ]
     
     return core_concepts, core_relations, all_concepts
 
