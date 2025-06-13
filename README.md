@@ -9,8 +9,11 @@
 - [RDF](https://www.w3.org/TR/rdf-schema/)/[OWL](https://www.w3.org/TR/owl2-overview/)
 - [DOLCE](https://www.loa.istc.cnr.it/dolce/overview.html) (une ontologie formelle axée sur la philosophie)
 
-## L'ontologie
+## TODO
+- [x] Utiliser le dictionnaire de philo-lycee.fr pour constituer une grande base de concepts
+- [ ] Pour chaque concept, pour chaque relation, proposer des concepts
 
+## L'ontologie
 
 ```py
 from enum import Enum
