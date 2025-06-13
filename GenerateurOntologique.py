@@ -5,6 +5,7 @@ from tqdm import tqdm
 import time
 import openai
 import sys
+import concurrent.futures
 
 try:
     from colorama import Fore, Style, init as colorama_init
@@ -206,6 +207,26 @@ def print_separator():
 OLLAMA = True  # Peut être modifié manuellement ici (True/False)
 
 # ---------- SCRIPT PRINCIPAL ----------
+def process_relation(args):
+    """Fonction pour le parallélisme Ollama : traite une relation pour un mot donné."""
+    mot, definition, relation, explication, ollama_model = args
+    relation_key = relation.lower().replace("é", "e").replace("à", "a").replace("è", "e").replace("ê", "e").replace("ù", "u").replace("û", "u").replace("ç", "c").replace("'", "_").replace(" ", "_")
+    cprint(f"🔗 [{mot}] Relation : {relation}", "blue")
+    if explication:
+        cprint(f"   Explication : {explication}", "cyan")
+    else:
+        cprint("   (Pas d'explication trouvée pour cette relation)", "red")
+    req_start = time.time()
+    concepts = ollama_concepts(mot, definition, relation, explication, model=ollama_model)
+    req_end = time.time()
+    req_duration = req_end - req_start
+    cprint(f"   ⏱️ Temps pour cette requête : {format_time(req_duration)}", "cyan")
+    cprint(f"   ⏳ (Parallèle) Fin de la relation {relation}", "yellow")
+    return (relation, {
+        "explication": explication,
+        "concepts": concepts
+    })
+
 def main(start_id=471, end_id=6120, use_ollama=False, ollama_model="llama3.1:latest"):
     global OLLAMA
     # Priorité à la valeur manuelle si modifiée, sinon celle du CLI
@@ -235,6 +256,8 @@ def main(start_id=471, end_id=6120, use_ollama=False, ollama_model="llama3.1:lat
 
     start_time = time.time()
     processed_requests = 0
+    total_mots = len(ids_to_process)
+    mots_faits = 0
 
     for idx_pos, idx in enumerate(tqdm(ids_to_process, desc="Concepts", ncols=100)):
         mot, definition = get_mot_def(idx)
@@ -248,45 +271,66 @@ def main(start_id=471, end_id=6120, use_ollama=False, ollama_model="llama3.1:lat
             "relations": {}
         }
 
-        for rel_pos, relation in enumerate(types_relations):
-            relation_key = relation.lower().replace("é", "e").replace("à", "a").replace("è", "e").replace("ê", "e").replace("ù", "u").replace("û", "u").replace("ç", "c").replace("'", "_").replace(" ", "_")
-            explication = relation_explications.get(relation_key, "")
-            cprint(f"🔗 [{mot}] Relation : {relation}", "blue")
-            if explication:
-                cprint(f"   Explication : {explication}", "cyan")
-            else:
-                cprint("   (Pas d'explication trouvée pour cette relation)", "red")
-
-            req_start = time.time()
-            if use_ollama:
-                concepts = ollama_concepts(mot, definition, relation, explication, model=ollama_model)
-            else:
-                concepts = openai_concepts(mot, definition, relation, explication)
-            req_end = time.time()
-            req_duration = req_end - req_start
-
-            entry["relations"][relation] = {
-                "explication": explication,
-                "concepts": concepts
-            }
-
-            processed_requests += 1
+        if use_ollama:
+            args_list = []
+            for relation in types_relations:
+                relation_key = relation.lower().replace("é", "e").replace("à", "a").replace("è", "e").replace("ê", "e").replace("ù", "u").replace("û", "u").replace("ç", "c").replace("'", "_").replace(" ", "_")
+                explication = relation_explications.get(relation_key, "")
+                args_list.append((mot, definition, relation, explication, ollama_model))
+            max_workers = min(32, len(types_relations))
+            rel_start_time = time.time()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                results = list(executor.map(process_relation, args_list))
+            rel_end_time = time.time()
+            for relation, rel_data in results:
+                entry["relations"][relation] = rel_data
+                processed_requests += 1
+            mots_faits += 1
             elapsed = time.time() - start_time
-            avg_time_per_req = elapsed / processed_requests if processed_requests else 0.0
-            remaining_requests = total_requests - processed_requests
-            est_time_left = avg_time_per_req * remaining_requests
-            est_cost_left = remaining_requests * cost_per_req
-
-            cprint(f"   ⏱️ Temps pour cette requête : {format_time(req_duration)}", "cyan")
-            if not use_ollama:
+            avg_time_per_mot = elapsed / mots_faits if mots_faits else 0.0
+            remaining_mots = total_mots - mots_faits
+            est_time_left = avg_time_per_mot * remaining_mots
+            tqdm.write(
+                f"🟦 Progression : {mots_faits}/{total_mots} mots | "
+                f"Temps écoulé : {format_time(elapsed)} | "
+                f"Temps restant estimé : {format_time(est_time_left)}"
+            )
+        else:
+            for rel_pos, relation in enumerate(types_relations):
+                relation_key = relation.lower().replace("é", "e").replace("à", "a").replace("è", "e").replace("ê", "e").replace("ù", "u").replace("û", "u").replace("ç", "c").replace("'", "_").replace(" ", "_")
+                explication = relation_explications.get(relation_key, "")
+                cprint(f"🔗 [{mot}] Relation : {relation}", "blue")
+                if explication:
+                    cprint(f"   Explication : {explication}", "cyan")
+                else:
+                    cprint("   (Pas d'explication trouvée pour cette relation)", "red")
+                req_start = time.time()
+                concepts = openai_concepts(mot, definition, relation, explication)
+                req_end = time.time()
+                req_duration = req_end - req_start
+                entry["relations"][relation] = {
+                    "explication": explication,
+                    "concepts": concepts
+                }
+                processed_requests += 1
+                elapsed = time.time() - start_time
+                avg_time_per_req = elapsed / processed_requests if processed_requests else 0.0
+                remaining_requests = total_requests - processed_requests
+                est_time_left = avg_time_per_req * remaining_requests
+                est_cost_left = remaining_requests * cost_per_req
+                cprint(f"   ⏱️ Temps pour cette requête : {format_time(req_duration)}", "cyan")
                 cprint(f"   💸 Coût de cette requête : {format_cost(cost_per_req)}", "magenta")
                 cprint(f"   ⏳ Temps estimé restant : {format_time(est_time_left)}", "yellow")
                 cprint(f"   💰 Coût total estimé restant : {format_cost(est_cost_left)}", "yellow", bold=True)
-            else:
-                cprint(f"   ⏳ Temps estimé restant : {format_time(est_time_left)}", "yellow")
+                cprint("   Pause pour éviter le rate limit...", "magenta")
+                time.sleep(1.3)
+            mots_faits += 1
 
-            cprint("   Pause pour éviter le rate limit...", "magenta")
-            time.sleep(1.3)
+        elapsed = time.time() - start_time
+        avg_time_per_req = elapsed / processed_requests if processed_requests else 0.0
+        remaining_requests = total_requests - processed_requests
+        est_time_left = avg_time_per_req * remaining_requests
+        est_cost_left = remaining_requests * cost_per_req
 
         data[str(idx)] = entry
         save_json(data, OUTFILE)
@@ -294,12 +338,13 @@ def main(start_id=471, end_id=6120, use_ollama=False, ollama_model="llama3.1:lat
         print_separator()
         time.sleep(1)
 
-        tqdm.write(
-            f"🟦 Progression : {processed_requests}/{total_requests} requêtes | "
-            f"Temps écoulé : {format_time(elapsed)} | "
-            f"Temps restant estimé : {format_time(est_time_left)}"
-            + (f" | Coût restant estimé : {format_cost(est_cost_left)}" if not use_ollama else "")
-        )
+        if not use_ollama:
+            tqdm.write(
+                f"🟦 Progression : {processed_requests}/{total_requests} requêtes | "
+                f"Temps écoulé : {format_time(elapsed)} | "
+                f"Temps restant estimé : {format_time(est_time_left)}"
+                + (f" | Coût restant estimé : {format_cost(est_cost_left)}" if not use_ollama else "")
+            )
 
     cprint("🎉 Traitement terminé !", "green", bold=True)
     cprint(f"Tous les résultats sont dans {OUTFILE}", "green")
