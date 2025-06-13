@@ -2,7 +2,14 @@
 
 → utilisée dans [SophIA](https://github.com/XenocodeRCE/SophIA)
 
-## Ontologie
+## Inspirations
+
+- [BFO](https://basic-formal-ontology.org/) (Basic Formal Ontology)
+- [SUMO](https://www.ontologyportal.org/) (Suggested Upper Merged Ontology)
+- [RDF](https://www.w3.org/TR/rdf-schema/)/[OWL](https://www.w3.org/TR/owl2-overview/)
+- [DOLCE](https://www.loa.istc.cnr.it/dolce/overview.html) (une ontologie formelle axée sur la philosophie)
+
+## L'ontologie
 
 
 ```py
